@@ -1,1 +1,1 @@
-# scrapping
+# scrapping data from restaurants
