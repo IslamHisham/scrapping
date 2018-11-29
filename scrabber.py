@@ -21,7 +21,7 @@ supposed human flow
 
 city = "dubai"  # can be turned into a list of cities later on
 time_limit = 30
-file_path = './restaurants_data.txt'
+file_path = './restaurants_data.json'  # this will be the result file
 target_page = 170
 
 def restaurants_per_page():
@@ -94,8 +94,7 @@ def restaurants_per_page():
         print(restaurant_info_formatted)
         # -------------------------------dumping data into a file  ---------------------------------
         dump_file = open(file_path,'a')  # appending to the file
-        dump_file.write(json.dumps(restaurant_info_formatted))
-        dump_file.write("\n")
+        dump_file.write(json.dumps(restaurant_info_formatted)+',') #don't forget to remove the last comma after the script finishes
         dump_file.close()
         # -------------------------------- dump block ended ----------------------------------------
         driver.close()  # Close menu tab
