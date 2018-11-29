@@ -20,12 +20,17 @@ supposed human flow
 '''
 
 city = "dubai"  # can be turned into a list of cities later on
-time_limit = 10
+time_limit = 30
 file_path = './restaurants_data.txt'
-
+target_page = 170
 
 def restaurants_per_page():
     """this function gets the restaurants data in a jsonified manner per page"""
+    try:  # Wait until the needed rendered components are loaded within 10 seconds time limit
+        element = WebDriverWait(driver, time_limit).until(
+            ec.presence_of_element_located((By.CLASS_NAME, "search-card")))
+    except:
+        print("Couldn't load new page within the time limit")
     containers_per_page = driver.find_elements_by_class_name(
         'search-card')  # get a list of cards that has restaurants info
     # Narrowing the scope of working from the whole page to the containers context
@@ -93,7 +98,6 @@ def restaurants_per_page():
         dump_file.write("\n")
         dump_file.close()
         # -------------------------------- dump block ended ----------------------------------------
-        time.sleep(2)
         driver.close()  # Close menu tab
         driver.switch_to.window(main_window)  # focus back to the previous restaurants page
     print("finished scrapping", len(containers_per_page), "restaurants")
@@ -101,22 +105,28 @@ def restaurants_per_page():
 
 # ======= starting the program ===== #
 driver = webdriver.Firefox()  # the driver is now using firefox browser
-driver.get("https://www.zomato.com/" + city + "/restaurants?q=restaurants")
+driver.get("https://www.zomato.com/" + city + "/restaurants?q=restaurants&page="+str(target_page))
 try:  # Wait until the needed components is loaded within 10 seconds time limit
     element = WebDriverWait(driver, time_limit).until(ec.presence_of_element_located((By.CLASS_NAME, "search-card")))
 except:
     print("Couldn't load elements within the time limit")
 pages_num = int(driver.find_element_by_class_name('col-l-4.mtop.pagination-number').text.split()[-1])
 
-for page_num in range(1,pages_num):
+for page_num in range(target_page, pages_num):
     print(restaurants_per_page())
+    try:  # Wait until the needed rendered components are loaded within 10 seconds time limit
+        element = WebDriverWait(driver, time_limit).until(
+            ec.presence_of_element_located((By.CLASS_NAME, "paginator_item.next.item")))
+    except:
+        print("couldn't find next page link")
     next_page = driver.find_element_by_class_name('paginator_item.next.item')  # locating next page button
     old_main_window = driver.window_handles[0]
     next_page.send_keys(Keys.CONTROL + Keys.RETURN)  # opening the next page in a new tab
-    time.sleep(5)  # wait for the new tab to load
+    time.sleep(2)  # wait for the new tab to load
     next_main_window = driver.window_handles[1]
     driver.close()
     driver.switch_to.window(next_main_window)  # focusing on new window
+    print("finished page:", page_num)
 
 driver.quit()
 
