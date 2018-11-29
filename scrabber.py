@@ -22,7 +22,7 @@ supposed human flow
 city = "dubai"  # can be turned into a list of cities later on
 time_limit = 30
 file_path = './restaurants_data.json'  # this will be the result file
-target_page = 170
+target_page = 170  # will be used as a check-point to start from it if any interruptions happen
 
 def restaurants_per_page():
     """this function gets the restaurants data in a jsonified manner per page"""
@@ -125,7 +125,7 @@ for page_num in range(target_page, pages_num):
     next_main_window = driver.window_handles[1]
     driver.close()
     driver.switch_to.window(next_main_window)  # focusing on new window
-    print("finished page:", page_num)
+    print("finished page:", page_num)  # in later stage page_num will be saved in a file called progress to track the page we reached
 
 driver.quit()
 
