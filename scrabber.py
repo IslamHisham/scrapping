@@ -21,8 +21,25 @@ supposed human flow
 
 city = "dubai"  # can be turned into a list of cities later on
 time_limit = 30
-file_path = './restaurants_data.json'  # this will be the result file
-target_page = 170  # will be used as a check-point to start from it if any interruptions happen
+result_file_path = './restaurants_data.txt'
+check_point_page = 1  # initializing the checkpoint page variable with 1 in case there were no interruptions
+check_point_restaurant = 1  # initializing the checkpoint restaurant variable with 1 in case there were no interruptions
+interrupted = True  # set this flag to true if the scrabbing was interrupted and run it again
+
+if interrupted:  # something stopped the scrabber
+    page_check_point = open('./page_checkpoint.txt', 'r')
+    for line in page_check_point:
+        # get the stored number from the first line in the file to start from it after interruptions
+        check_point_page = int(line)
+    page_check_point.close()  # close the file
+    restaurant_check_point = open('./restaurant_checkpoint.txt', 'r')
+    for line in restaurant_check_point:
+        # get the stored number from the first line in the file to start from it after interruptions
+        check_point_restaurant = int(line)
+    restaurant_check_point.close()  # close the file
+
+print("starting from page", check_point_page, "and restaurant", check_point_page)
+
 
 def restaurants_per_page():
     """this function gets the restaurants data in a jsonified manner per page"""
@@ -34,14 +51,20 @@ def restaurants_per_page():
     containers_per_page = driver.find_elements_by_class_name(
         'search-card')  # get a list of cards that has restaurants info
     # Narrowing the scope of working from the whole page to the containers context
+    restaurant_order = 0  # initializing the variable that will has the restaurant number per page
     for container in containers_per_page:
+        restaurant_order += 1  # Increasing order as we found restaurants, this var will be our index
         # test the existence of the 'order now' button, this is a one item list
         menu_capable = container.find_elements_by_link_text("Order Now")
         if not menu_capable:  # if the menu capable list is empty, there is no 'order now' button, skip this restaurant
-            #print("skipping this container as there is no menu in the text format for it \n")
+            # print("skipping this container as there is no menu in the text format for it \n")
+            continue
+        if restaurant_order <= check_point_restaurant: # only start after the checkpoint restaurant otherwise skip
             continue
         restaurant_name_per_container = container.find_element_by_class_name(
             'result-title').text  # get the restaurant name
+        print("we are at scrabbable restaurant number", restaurant_order, "it's name is:",
+              restaurant_name_per_container)
         restaurant_address_per_container = container.find_element_by_class_name(
             'search-result-address').text  # get address
         table_booking = container.find_elements_by_class_name(
@@ -92,10 +115,15 @@ def restaurants_per_page():
         # print("meals of this restaurant are:", meals_per_restaurant)
         restaurant_info_formatted['meals'] = meals_per_restaurant
         print(restaurant_info_formatted)
-        # -------------------------------dumping data into a file  ---------------------------------
-        dump_file = open(file_path,'a')  # appending to the file
-        dump_file.write(json.dumps(restaurant_info_formatted)+',') #don't forget to remove the last comma after the script finishes
+        # -------------------------------dumping data into files  ---------------------------------
+        dump_file = open(result_file_path, 'a')  # appending to the file
+        dump_file.write(json.dumps(restaurant_info_formatted))
+        dump_file.write(",\n")
         dump_file.close()
+        # recording the current restaurant order we have saved to be used as checkpoint later
+        restaurant_check_point = open('./restaurant_checkpoint.txt', 'w')
+        restaurant_check_point.write(str(restaurant_order))
+        restaurant_check_point.close()
         # -------------------------------- dump block ended ----------------------------------------
         driver.close()  # Close menu tab
         driver.switch_to.window(main_window)  # focus back to the previous restaurants page
@@ -104,14 +132,14 @@ def restaurants_per_page():
 
 # ======= starting the program ===== #
 driver = webdriver.Firefox()  # the driver is now using firefox browser
-driver.get("https://www.zomato.com/" + city + "/restaurants?q=restaurants&page="+str(target_page))
+driver.get("https://www.zomato.com/" + city + "/restaurants?q=restaurants&page="+str(check_point_page))
 try:  # Wait until the needed components is loaded within 10 seconds time limit
     element = WebDriverWait(driver, time_limit).until(ec.presence_of_element_located((By.CLASS_NAME, "search-card")))
 except:
     print("Couldn't load elements within the time limit")
 pages_num = int(driver.find_element_by_class_name('col-l-4.mtop.pagination-number').text.split()[-1])
 
-for page_num in range(target_page, pages_num):
+for page_num in range(check_point_page, pages_num):  # start the loop after the checkpoint page
     print(restaurants_per_page())
     try:  # Wait until the needed rendered components are loaded within 10 seconds time limit
         element = WebDriverWait(driver, time_limit).until(
@@ -119,13 +147,18 @@ for page_num in range(target_page, pages_num):
     except:
         print("couldn't find next page link")
     next_page = driver.find_element_by_class_name('paginator_item.next.item')  # locating next page button
+    # saving the current page number in a file as a check point
     old_main_window = driver.window_handles[0]
     next_page.send_keys(Keys.CONTROL + Keys.RETURN)  # opening the next page in a new tab
     time.sleep(2)  # wait for the new tab to load
     next_main_window = driver.window_handles[1]
     driver.close()
     driver.switch_to.window(next_main_window)  # focusing on new window
-    print("finished page:", page_num)  # in later stage page_num will be saved in a file called progress to track the page we reached
+    print("finished page:", page_num)
+    # saving the new page as a checkpoint
+    page_check_point = open('./page_checkpoint.txt', 'w')
+    page_check_point.write(str(page_num+1))
+    page_check_point.close()  # closing the checkpoint file
 
 driver.quit()
 
