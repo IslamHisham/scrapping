@@ -22,9 +22,13 @@ supposed human flow
 city = "dubai"  # can be turned into a list of cities later on
 time_limit = 30
 result_file_path = './restaurants_data.txt'
+dump_file = open(result_file_path, 'w')
+dump_file.write('[')  # writing '[' to the file as we will need it to contain jsonified array of objects
+dump_file.close()
 check_point_page = 1  # initializing the checkpoint page variable with 1 in case there were no interruptions
 check_point_restaurant = 1  # initializing the checkpoint restaurant variable with 1 in case there were no interruptions
-interrupted = True  # set this flag to true if the scrabbing was interrupted and run it again
+interrupted = False  # set this flag to true if the scrabbing was interrupted and run it again
+get_restaurants_with_meals_only = False  # flag to get restaurants where we have meals in text not image
 
 if interrupted:  # something stopped the scrabber
     page_check_point = open('./page_checkpoint.txt', 'r')
@@ -56,10 +60,10 @@ def restaurants_per_page():
         restaurant_order += 1  # Increasing order as we found restaurants, this var will be our index
         # test the existence of the 'order now' button, this is a one item list
         menu_capable = container.find_elements_by_link_text("Order Now")
-        if not menu_capable:  # if the menu capable list is empty, there is no 'order now' button, skip this restaurant
-            # print("skipping this container as there is no menu in the text format for it \n")
+        if not menu_capable and get_restaurants_with_meals_only:  # if the menu capable list is empty, there is no 'order now' button, and we only want restaurants with meals skip this restaurant
+            print("skipping this container as there is no menu in the text format for it \n")
             continue
-        if restaurant_order <= check_point_restaurant: # only start after the checkpoint restaurant otherwise skip
+        if restaurant_order <= check_point_restaurant:  # only start after the checkpoint restaurant otherwise skip
             continue
         restaurant_name_per_container = container.find_element_by_class_name(
             'result-title').text  # get the restaurant name
@@ -73,46 +77,56 @@ def restaurants_per_page():
             table_booking = True
         else:
             table_booking = False
+        restaurant_rate_per_container = container.find_element_by_class_name('rating-popup').text
+        if re.match("^\d+?\.\d+?$", restaurant_rate_per_container) is None:  # using regex check if rate string is float
+            restaurant_vote_per_container = None
+        else:
+            restaurant_vote_per_container = container.find_element_by_css_selector("span[class^='rating-votes-div']").text.strip(' votes')
         # get the info of the restaurants; hours, cuisines, promotions if there are any and book for two
         restaurant_info = container.find_element_by_class_name('search-page-text.clearfix.row').text
         restaurant_info = re.split(r"\.|\?|\!|\n|\r",
                                    restaurant_info)  # change it from string to list separated by lines
 
         restaurant_info_formatted = {'name': restaurant_name_per_container, 'address': restaurant_address_per_container,
-                                     'table booking': table_booking}
+                                     'table booking': table_booking, 'rate': restaurant_rate_per_container,
+                                     'votes': restaurant_vote_per_container}
         for i in range(0, len(restaurant_info) - 1, 2):
             # changing info to a dict to be jsonfied later and making sure there are no ':' character
             restaurant_info_formatted[restaurant_info[i].strip(':')] = restaurant_info[i + 1]
-
         # ------------------------------- retrieving meals info -----------------------------------#
-        meals_per_restaurant = []  # a list that will be added later to the restaurants info dict
-        main_window = driver.window_handles[0]  # add a reference to main window 'restaurants page' here
-        menu_capable[0].send_keys(Keys.CONTROL + Keys.RETURN)  # open the menus in a new tab
-        time.sleep(2)  # wait for the new tab to load
-        menu_window = driver.window_handles[1]  # add a reference to menu window 'menu for selected restaurant here
-        driver.switch_to.window(menu_window)  # switch focus to the new tab
-        try:  # Wait until the needed rendered components are loaded within 10 seconds time limit
-            element = WebDriverWait(driver, time_limit).until(
-                ec.presence_of_element_located((By.CLASS_NAME, "ui.item.item-view")))
-        except:
-            print("Couldn't load elements within the time limit")
-        meals_objects = driver.find_elements_by_class_name("ui.item.item-view")
-        for meal_per_restaurant in meals_objects:  # looping on the meals of the restaurant
-            meal_details = {}  # dict for recording each meal details
-            line_num_per_meal = 1  # initializing a counter
-            for line in re.split(r"\.|\?|\!|\n|\r", meal_per_restaurant.text):  # looping on the details of each meal
-                # skip the test of 'add' and 'customizations available' buttons
-                if line.lower() == 'add' or line.lower() == 'customizations available':
-                    continue
-                if line_num_per_meal == 1:  # first line has the name
-                    meal_details['name'] = line.strip('\n')
-                elif line_num_per_meal == 2:  # second line has the price
-                    meal_details['price'] = line.strip('\n')
-                else:  # third line has the description if it existed
-                    meal_details['description'] = line.strip('\n')
-                line_num_per_meal += 1
-            meals_per_restaurant.append(meal_details)
-        # print("meals of this restaurant are:", meals_per_restaurant)
+        if menu_capable:
+            main_window = driver.window_handles[0]  # add a reference to main window 'restaurants page' here
+            meals_per_restaurant = []  # a list that will be added later to the restaurants info dict
+            menu_capable[0].send_keys(Keys.CONTROL + Keys.RETURN)  # open the menus in a new tab
+            time.sleep(2)  # wait for the new tab to load
+            menu_window = driver.window_handles[1]  # add a reference to menu window 'menu for selected restaurant here
+            driver.switch_to.window(menu_window)  # switch focus to the new tab
+            try:  # Wait until the needed rendered components are loaded within 10 seconds time limit
+                element = WebDriverWait(driver, time_limit).until(
+                    ec.presence_of_element_located((By.CLASS_NAME, "ui.item.item-view")))
+            except:
+                print("Couldn't load elements within the time limit")
+            meals_objects = driver.find_elements_by_class_name("ui.item.item-view")
+            for meal_per_restaurant in meals_objects:  # looping on the meals of the restaurant
+                meal_details = {}  # dict for recording each meal details
+                line_num_per_meal = 1  # initializing a counter
+                for line in re.split(r"\.|\?|\!|\n|\r", meal_per_restaurant.text):  # looping on the details of each meal
+                    # skip the test of 'add' and 'customizations available' buttons
+                    if line.lower() == 'add' or line.lower() == 'customizations available':
+                        continue
+                    if line_num_per_meal == 1:  # first line has the name
+                        meal_details['name'] = line.strip('\n')
+                    elif line_num_per_meal == 2:  # second line has the price
+                        meal_details['price'] = line.strip('\n')
+                    else:  # third line has the description if it existed
+                        meal_details['description'] = line.strip('\n')
+                    line_num_per_meal += 1
+                meals_per_restaurant.append(meal_details)
+            # print("meals of this restaurant are:", meals_per_restaurant)
+            driver.close()  # Close menu tab
+            driver.switch_to.window(main_window)  # focus back to the previous restaurants page
+        else:
+            meals_per_restaurant = "image"
         restaurant_info_formatted['meals'] = meals_per_restaurant
         print(restaurant_info_formatted)
         # -------------------------------dumping data into files  ---------------------------------
@@ -125,8 +139,6 @@ def restaurants_per_page():
         restaurant_check_point.write(str(restaurant_order))
         restaurant_check_point.close()
         # -------------------------------- dump block ended ----------------------------------------
-        driver.close()  # Close menu tab
-        driver.switch_to.window(main_window)  # focus back to the previous restaurants page
     print("finished scrapping", len(containers_per_page), "restaurants")
 
 
@@ -159,8 +171,12 @@ for page_num in range(check_point_page, pages_num):  # start the loop after the 
     page_check_point = open('./page_checkpoint.txt', 'w')
     page_check_point.write(str(page_num+1))
     page_check_point.close()  # closing the checkpoint file
-
 driver.quit()
+
+
+dump_file = open(result_file_path, 'w')
+dump_file.write(']')  # writing ']' to the file as we will need it to close jsonified array of objects
+dump_file.close()
 
 ''' notes: 
 1. if there are classes names separated by spaces then this means we see a child for example  class="op small"
