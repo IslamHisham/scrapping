@@ -18,35 +18,36 @@ supposed human flow
 4. click on the 'Order Now' button for each restaurant and get the list of meals for the restaurant
 5. repeat the same process for all pages
 '''
-
+# ----------variables initialization ----------------#
 city = "dubai"  # can be turned into a list of cities later on
 time_limit = 30
+interrupted = True  # set this flag to true if the scrabbing was interrupted and run it again
 result_file_path = './restaurants_data.txt'
-dump_file = open(result_file_path, 'w')
+if interrupted:
+    dump_file = open(result_file_path, 'a')  # append to file if there was interruption
+else:
+    dump_file = open(result_file_path, 'w')  # write a new file if there was no interruption
 dump_file.write('[')  # writing '[' to the file as we will need it to contain jsonified array of objects
 dump_file.close()
 check_point_page = 1  # initializing the checkpoint page variable with 1 in case there were no interruptions
-check_point_restaurant = 1  # initializing the checkpoint restaurant variable with 1 in case there were no interruptions
-interrupted = False  # set this flag to true if the scrabbing was interrupted and run it again
+check_point_restaurant = 0  # initializing the checkpoint restaurant variable with 1 in case there were no interruptions
 get_restaurants_with_meals_only = False  # flag to get restaurants where we have meals in text not image
-
-if interrupted:  # something stopped the scrabber
-    page_check_point = open('./page_checkpoint.txt', 'r')
-    for line in page_check_point:
-        # get the stored number from the first line in the file to start from it after interruptions
-        check_point_page = int(line)
-    page_check_point.close()  # close the file
-    restaurant_check_point = open('./restaurant_checkpoint.txt', 'r')
-    for line in restaurant_check_point:
-        # get the stored number from the first line in the file to start from it after interruptions
-        check_point_restaurant = int(line)
-    restaurant_check_point.close()  # close the file
-
-print("starting from page", check_point_page, "and restaurant", check_point_page)
+restaurant_order = 1  # initializing the variable that will has the restaurant number per page
+restaurant_check_point = 1  # initializing the variable that will load the restaurant number per page when interrupted
 
 
-def restaurants_per_page():
+# ----------classes and functions initialization ----------------#
+
+
+class NoneObject:
+    """this class will be used when we need an object whose attribute "text" gives 'None' """
+    def __init__(self):
+        self.text = 'None'
+
+
+def restaurants_per_page(page_num, check_point_restaurant):
     """this function gets the restaurants data in a jsonified manner per page"""
+    print("starting from page", page_num, "and restaurant", check_point_restaurant)
     try:  # Wait until the needed rendered components are loaded within 10 seconds time limit
         element = WebDriverWait(driver, time_limit).until(
             ec.presence_of_element_located((By.CLASS_NAME, "search-card")))
@@ -55,7 +56,7 @@ def restaurants_per_page():
     containers_per_page = driver.find_elements_by_class_name(
         'search-card')  # get a list of cards that has restaurants info
     # Narrowing the scope of working from the whole page to the containers context
-    restaurant_order = 0  # initializing the variable that will has the restaurant number per page
+    restaurant_order = 0
     for container in containers_per_page:
         restaurant_order += 1  # Increasing order as we found restaurants, this var will be our index
         # test the existence of the 'order now' button, this is a one item list
@@ -63,8 +64,10 @@ def restaurants_per_page():
         if not menu_capable and get_restaurants_with_meals_only:  # if the menu capable list is empty, there is no 'order now' button, and we only want restaurants with meals skip this restaurant
             print("skipping this container as there is no menu in the text format for it \n")
             continue
-        if restaurant_order <= check_point_restaurant:  # only start after the checkpoint restaurant otherwise skip
-            continue
+        if interrupted:
+            if restaurant_order <= check_point_restaurant:  # only start after the checkpoint restaurant otherwise skip
+                print("skipping this restaurant as order is:", restaurant_order,"while checkpoint is at",check_point_restaurant)
+                continue
         restaurant_name_per_container = container.find_element_by_class_name(
             'result-title').text  # get the restaurant name
         print("we are at scrabbable restaurant number", restaurant_order, "it's name is:",
@@ -77,8 +80,10 @@ def restaurants_per_page():
             table_booking = True
         else:
             table_booking = False
-        restaurant_rate_per_container = container.find_element_by_class_name('rating-popup').text
-        if re.match("^\d+?\.\d+?$", restaurant_rate_per_container) is None:  # using regex check if rate string is float
+        restaurant_rate_per_container = container.find_elements_by_class_name('rating-popup')  # using a list to check if element is present or list will be empty instead of "try .. except" block
+        if not restaurant_rate_per_container:
+            restaurant_rate_per_container = [NoneObject()]  # using the none object to produce an attribute "text" of value None
+        if re.match("^\d+?\.\d+?$", restaurant_rate_per_container[0].text) is None:  # using regex check if rate string is float
             restaurant_vote_per_container = None
         else:
             restaurant_vote_per_container = container.find_element_by_css_selector("span[class^='rating-votes-div']").text.strip(' votes')
@@ -88,7 +93,7 @@ def restaurants_per_page():
                                    restaurant_info)  # change it from string to list separated by lines
 
         restaurant_info_formatted = {'name': restaurant_name_per_container, 'address': restaurant_address_per_container,
-                                     'table booking': table_booking, 'rate': restaurant_rate_per_container,
+                                     'table booking': table_booking, 'rate': restaurant_rate_per_container[0].text,
                                      'votes': restaurant_vote_per_container}
         for i in range(0, len(restaurant_info) - 1, 2):
             # changing info to a dict to be jsonfied later and making sure there are no ':' character
@@ -139,20 +144,38 @@ def restaurants_per_page():
         restaurant_check_point.write(str(restaurant_order))
         restaurant_check_point.close()
         # -------------------------------- dump block ended ----------------------------------------
+
     print("finished scrapping", len(containers_per_page), "restaurants")
 
 
 # ======= starting the program ===== #
+if interrupted:  # something stopped the scrabber
+    page_check_point = open('./page_checkpoint.txt', 'r')
+    for line in page_check_point:
+        # get the stored number from the first line in the file to start from it after interruptions
+        check_point_page = int(line)
+    page_check_point.close()  # close the file
+    restaurant_check_point = open('./restaurant_checkpoint.txt', 'r')
+    for line in restaurant_check_point:
+        # get the stored number from the first line in the file to start from it after interruptions
+        check_point_restaurant = int(line)
+    restaurant_check_point.close()  # close the file
+
+
 driver = webdriver.Firefox()  # the driver is now using firefox browser
 driver.get("https://www.zomato.com/" + city + "/restaurants?q=restaurants&page="+str(check_point_page))
 try:  # Wait until the needed components is loaded within 10 seconds time limit
     element = WebDriverWait(driver, time_limit).until(ec.presence_of_element_located((By.CLASS_NAME, "search-card")))
 except:
     print("Couldn't load elements within the time limit")
-pages_num = int(driver.find_element_by_class_name('col-l-4.mtop.pagination-number').text.split()[-1])
+pages_num = int(driver.find_element_by_class_name('col-l-4.mtop.pagination-number').text.split()[-1])  # total number of pages
 
 for page_num in range(check_point_page, pages_num):  # start the loop after the checkpoint page
-    print(restaurants_per_page())
+    if interrupted:  # if interrupted, start from checkpoint
+        print(restaurants_per_page(page_num, check_point_restaurant))
+    else:
+        print(restaurants_per_page(page_num, 1))  # if not interrupted, start from one as normal
+    interrupted = False  # toggling the flag back for the next iteration when checking if there is an interrupt
     try:  # Wait until the needed rendered components are loaded within 10 seconds time limit
         element = WebDriverWait(driver, time_limit).until(
             ec.presence_of_element_located((By.CLASS_NAME, "paginator_item.next.item")))
@@ -174,7 +197,7 @@ for page_num in range(check_point_page, pages_num):  # start the loop after the 
 driver.quit()
 
 
-dump_file = open(result_file_path, 'w')
+dump_file = open(result_file_path, 'a')
 dump_file.write(']')  # writing ']' to the file as we will need it to close jsonified array of objects
 dump_file.close()
 
