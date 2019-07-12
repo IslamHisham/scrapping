@@ -140,7 +140,7 @@ def restaurants_per_page(page_num, check_point_restaurant):
         dump_file.write(",\n")
         dump_file.close()
         # recording the current restaurant order we have saved to be used as checkpoint later
-        restaurant_check_point = open('./restaurant_checkpoint.txt', 'w')
+        restaurant_check_point = open('restaurant_checkpoint.txt', 'w')
         restaurant_check_point.write(str(restaurant_order))
         restaurant_check_point.close()
         # -------------------------------- dump block ended ----------------------------------------
@@ -150,12 +150,12 @@ def restaurants_per_page(page_num, check_point_restaurant):
 
 # ======= starting the program ===== #
 if interrupted:  # something stopped the scrabber
-    page_check_point = open('./page_checkpoint.txt', 'r')
+    page_check_point = open('page_checkpoint.txt', 'r')
     for line in page_check_point:
         # get the stored number from the first line in the file to start from it after interruptions
         check_point_page = int(line)
     page_check_point.close()  # close the file
-    restaurant_check_point = open('./restaurant_checkpoint.txt', 'r')
+    restaurant_check_point = open('restaurant_checkpoint.txt', 'r')
     for line in restaurant_check_point:
         # get the stored number from the first line in the file to start from it after interruptions
         check_point_restaurant = int(line)
